@@ -1,0 +1,6 @@
+module(
+    name = "xla-ext",
+)
+
+deps = use_extension("//:deps.bzl", "xla_ext")
+use_repo(deps, "xla")
