@@ -1,52 +1,51 @@
-# Environment variables passed via elixir_make
-# ROOT_DIR
-# BUILD_ARCHIVE
-# BUILD_INTERNAL_FLAGS
-
 # System vars
-TEMP ?= $(HOME)/.cache
+BUILD_DIR ?= ./build
+CWD = `pwd`
 
-# Public configuration
-BUILD_MODE ?= opt # can also be dbg
-BUILD_CACHE ?= $(TEMP)/xla_extension
-OPENXLA_GIT_REPO ?= https://github.com/openxla/xla.git
+XLA_TARGET ?= cpu
+XLA_TARGET_PLATFORM ?= aarch64-darwin
 
-OPENXLA_GIT_REV ?= 0b476d54327ff20efddd50cb2bf0a0422fbb16e1
+BAZEL_BUILD_FLAGS = --enable_workspace \
+	--experimental_cc_static_library
+	# --show_progress \
+	# --worker_verbose \
+	# --verbose_failures \
+	# --subcommands
 
-# Private configuration
-BAZEL_FLAGS = --define "framework_shared_object=false" -c $(BUILD_MODE)
+BAZEL_TARGET = xla/extension:tarball
+BAZEL_FLAGS = $(BAZEL_BUILD_FLAGS) $(BUILD_FLAGS) $(BAZEL_TARGET)
 
-OPENXLA_NS = xla-$(OPENXLA_GIT_REV)
-OPENXLA_DIR = $(BUILD_CACHE)/$(OPENXLA_NS)
-OPENXLA_XLA_EXTENSION_NS = xla/extension
-OPENXLA_XLA_EXTENSION_DIR = $(OPENXLA_DIR)/$(OPENXLA_XLA_EXTENSION_NS)
-OPENXLA_XLA_BUILD_ARCHIVE = $(OPENXLA_DIR)/bazel-bin/$(OPENXLA_XLA_EXTENSION_NS)/xla_extension.tar.gz
+XLA_REV ?= 2a6015f068e4285a69ca9a535af63173ba92995b
+XLA_ARCHIVE = $(XLA_REV).tar.gz
+XLA_URL = https://github.com/openxla/xla/archive/$(XLA_ARCHIVE)
 
-$(BUILD_ARCHIVE): $(OPENXLA_DIR) extension/BUILD
-	rm -f $(OPENXLA_XLA_EXTENSION_DIR) && \
-		ln -s "$(ROOT_DIR)/extension" $(OPENXLA_XLA_EXTENSION_DIR) && \
-		cd $(OPENXLA_DIR) && \
-        cat $(ROOT_DIR)/WORKSPACE >> WORKSPACE && \
-		bazel build $(BAZEL_FLAGS) $(BUILD_FLAGS) $(BUILD_INTERNAL_FLAGS) //$(OPENXLA_XLA_EXTENSION_NS):xla_extension && \
-		mkdir -p $(dir $(BUILD_ARCHIVE)) && \
-		cp -f $(OPENXLA_XLA_BUILD_ARCHIVE) $(BUILD_ARCHIVE)
+XLA_DIR = $(BUILD_DIR)/xla-$(XLA_REV)
+XLA_EXT = xla/extension
+XLA_EXT_DIR = $(XLA_DIR)/$(XLA_EXT)
+XLA_TARBALL = $(XLA_DIR)/bazel-bin/$(XLA_EXT)/xla_extension.tar.gz
+TARBALL = xla_extension-$(XLA_TARGET_PLATFORM)-$(XLA_TARGET).tar.gz
 
-# Clones OPENXLA
-$(OPENXLA_DIR):
-	mkdir -p $(OPENXLA_DIR) && \
-		cd $(OPENXLA_DIR) && \
-		git init && \
-		git remote add origin $(OPENXLA_GIT_REPO) && \
-		git fetch --depth 1 origin $(OPENXLA_GIT_REV) && \
-		git checkout FETCH_HEAD && \
-		rm $(OPENXLA_DIR)/.bazelversion
+$(TARBALL): $(BUILD_DIR) $(XLA_TARBALL)
+	cp -f $(XLA_TARBALL) ./$(TARBALL)
 
-# Print OPENXLA Dir
-PTD:
-	@ echo $(OPENXLA_DIR)
+$(XLA_TARBALL): $(XLA_DIR) extension/BUILD
+	rm -f $(XLA_EXT_DIR) && \
+	ln -s `pwd`/extension $(XLA_EXT_DIR) && \
+	cd $(XLA_DIR) && \
+	./configure.py --backend=$(XLA_TARGET) && \
+	bazel build $(BAZEL_FLAGS)
+
+# Clone OpenXLA
+$(XLA_DIR):
+	cd $(BUILD_DIR) && \
+	rm -fr $(XLA_DIR) $(XLA_ARCHIVE) && \
+	wget $(XLA_URL) && \
+	tar zxf $(XLA_ARCHIVE)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
 clean:
-	cd $(OPENXLA_DIR) && bazel clean --expunge
-	rm -f $(OPENXLA_XLA_EXTENSION_DIR)
-	rm -rf $(OPENXLA_DIR)
-	rm -rf $(TARGET_DIR)
+	cd $(XLA_DIR) && bazel clean --expunge
+	rm -f $(XLA_EXT_DIR)
+	rm -rf $(XLA_DIR)
