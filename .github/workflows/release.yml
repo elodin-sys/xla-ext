@@ -12,9 +12,9 @@ jobs:
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
-    runs-on: ubuntu-large
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Create draft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -30,17 +30,16 @@ jobs:
       contents: write
     # We intentionally build on ubuntu 20 to compile against
     # an older version of glibc
-    runs-on: ubuntu-large
+    runs-on: ubuntu-24.04
     steps:
       - name: Install libtool-bin
         run: |
           sudo apt-get update && sudo apt-get install -y libtool-bin llvm
-      - uses: actions/checkout@v3
-      # Setup the compilation environment
-      - uses: abhinavsingh/setup-bazel@v3
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.14.0
         with:
           version: "${{ env.BAZEL_VER }}"
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: python -m pip install --upgrade pip numpy
@@ -55,16 +54,15 @@ jobs:
   macos:
     name: "aarch64-darwin-cpu (cross-compiled)"
     needs: [create_draft_release]
-    runs-on: macos-latest-xlarge
+    runs-on: macos-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v3
-      # Setup the compilation environment
-      - uses: abhinavsingh/setup-bazel@v3
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.14.0
         with:
           version: "${{ env.BAZEL_VER }}"
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: python -m pip install --upgrade pip numpy
@@ -86,32 +84,25 @@ jobs:
     permissions:
       contents: write
     needs: [create_draft_release]
-    runs-on: ubuntu-large
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - container: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
-            xla_target: cuda118
-            cuda_version: "11.8.0"
-            cuda_version_short: "11.8"
-            cudnn_version: "8.6.0"
+          - container: nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
+            xla_target: cuda130
+            cuda_version: "13.0.1"
+            cuda_version_short: "13.0"
+            cudnn_version: "9.13.0"
             python: "3.11"
-            cudnn_long_version: "8.6.0.163"
-          - container: nvidia/cuda:12.0.0-cudnn8-devel-ubuntu20.04
-            xla_target: cuda120
-            cuda_version: "12.0.0"
-            cuda_version_short: "12.0"
-            cudnn_version: "8.8.0"
-            python: "3.11"
-            cudnn_long_version: "8.8.0.121"
+            cudnn_long_version: "9.13.0"
     container: ${{ matrix.container }}
     env:
       # Set the missing UTF-8 locale, otherwise Elixir warns
       LC_ALL: C.UTF-8
       # Make sure installing packages (like tzdata) doesn't prompt for configuration
       DEBIAN_FRONTEND: noninteractive
-      ImageOS: "ubuntu20"
+      ImageOS: "ubuntu24"
     steps:
       # The base images are minimalistic, so we bring a few necessary system packages
       - name: Install system packages
@@ -139,12 +130,11 @@ jobs:
       # Prevent git from checking the repository owner and erroring with "dubious ownership"
       - run: git config --global --add safe.directory '*'
       # Proceed with the regular steps
-      - uses: actions/checkout@v3
-      # Setup the compilation environment
-      - uses: abhinavsingh/setup-bazel@v3
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.14.0
         with:
           version: "${{ env.BAZEL_VER }}"
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
         env:
@@ -160,35 +150,27 @@ jobs:
           XLA_TARGET: ${{ matrix.xla_target }}
 
   linux_arm:
-    name: "aarch64-linux-gnu-cpu (cross-compiled)"
+    name: "aarch64-linux-gnu-cpu"
     needs: [create_draft_release]
     permissions:
       contents: write
-    # We intentionally build on ubuntu 20 to compile against
-    # an older version of glibc
-    runs-on: ubuntu-22.04-arm-large
+    runs-on: ubuntu-24.04
     steps:
       - name: Install libtool-bin
         run: |
           sudo apt-get update && sudo apt-get install -y libtool-bin llvm
-      - uses: actions/checkout@v3
-      # Setup the compilation environment
-      - uses: abhinavsingh/setup-bazel@v3
+      - uses: actions/checkout@v4
+      - uses: bazel-contrib/setup-bazel@0.14.0
         with:
           version: "${{ env.BAZEL_VER }}"
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - run: python -m pip install --upgrade pip numpy
       # Build and upload the archives
       - run: make
-      # Hide system OpenSSL as suggested in https://github.com/tensorflow/tensorflow/issues/48401#issuecomment-818377995
-      - run: sudo mv /usr/include/openssl /usr/include/openssl.original
       - run: .github/scripts/upload.sh ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           XLA_TARGET: cpu
-          XLA_TARGET_PLATFORM: "aarch64-linux-gnu"
-          # Explicitly cross-compile for arm64
-          BUILD_FLAGS: "--config=elinux_aarch64"
           # CC: gcc-9
