@@ -1,0 +1,32 @@
+diff --git a/bazel/grpc_build_system.bzl b/bazel/grpc_build_system.bzl
+index f578b0d..982d5ed 100644
+--- a/bazel/grpc_build_system.bzl
++++ b/bazel/grpc_build_system.bzl
+@@ -27,7 +27,6 @@
+ Contains macros used throughout the repo.
+ """
+ 
+-load("@build_bazel_apple_support//rules:universal_binary.bzl", "universal_binary")
+ load("@build_bazel_rules_apple//apple:ios.bzl", "ios_unit_test")
+ load("@build_bazel_rules_apple//apple/testing/default_runner:ios_test_runner.bzl", "ios_test_runner")
+ load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+@@ -194,18 +193,11 @@ def grpc_proto_plugin(name, srcs = [], deps = []):
+         srcs = srcs,
+         deps = deps,
+     )
+-    universal_binary(
+-        name = name + "_universal",
+-        binary = name + "_native",
+-    )
+ 
+     # In order to avoid warnings from Bazel, names of the rule and its output file must differ.
+     native.genrule(
+         name = name,
+-        srcs = select({
+-            "@platforms//os:macos": [name + "_universal"],
+-            "//conditions:default": [name + "_native"],
+-        }),
++        srcs = [name + "_native"],
+         outs = [name + "_binary"],
+         cmd = "cp $< $@",
+         executable = True,

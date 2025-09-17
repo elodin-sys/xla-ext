@@ -1,0 +1,20 @@
+platforms:
+  # Generic Bazel Darwin x86_64 → arm64
+  //platforms:darwin_x86_64
+    --platforms=@build_bazel_apple_support//platforms:darwin_arm64
+    --host_platform=@build_bazel_apple_support//platforms:darwin_arm64
+    --cpu=darwin_arm64
+    --host_cpu=darwin_arm64
+
+  # Apple support repo’s x86_64 labels → arm64
+  @build_bazel_apple_support//platforms:darwin_x86_64
+    --platforms=@build_bazel_apple_support//platforms:darwin_arm64
+    --host_platform=@build_bazel_apple_support//platforms:darwin_arm64
+    --cpu=darwin_arm64
+    --host_cpu=darwin_arm64
+
+  @build_bazel_apple_support//platforms:macos_x86_64
+    --platforms=@build_bazel_apple_support//platforms:darwin_arm64
+    --host_platform=@build_bazel_apple_support//platforms:darwin_arm64
+    --cpu=darwin_arm64
+    --host_cpu=darwin_arm64

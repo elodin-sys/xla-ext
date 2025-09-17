@@ -4,6 +4,7 @@ load("@local_config_rocm//rocm:build_defs.bzl", "if_rocm")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("//xla/stream_executor:build_defs.bzl", "if_cuda_or_rocm")
 load("//xla/tsl:tsl.bzl", "if_with_tpu_support", "transitive_hdrs", "tsl_grpc_cc_dependencies")
+load(":collect_static.bzl", "collect_static")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -82,8 +83,8 @@ DEPS = [
     "//xla/tsl/util:determinism",
 ]
 
-# Shared library which contains the subset of XLA required for EXLA
-cc_static_library(
+# Static library which contains the subset of XLA required for EXLA
+cc_library(
     name = "xla_extension",
     features = ["-use_header_modules"],
     deps = DEPS +
@@ -95,6 +96,12 @@ cc_static_library(
     ]) + if_rocm([
         "//xla/stream_executor:rocm_platform",
     ]),
+    linkstatic = True,
+)
+
+collect_static(
+    name = "xla_extension_archive",
+    deps = [":xla_extension"],
 )
 
 # Transitive hdrs gets all headers required by deps, including
@@ -183,18 +190,17 @@ genrule(
 # This genrule remaps libxla_extension.so to lib/libxla_extension.so
 genrule(
     name = "xla_extension_lib",
-    srcs = [
-        ":xla_extension",
-    ] + if_with_tpu_support([
-        ":libtpu_a",
-    ]),
+    srcs = [":xla_extension_archive"]
+        + if_with_tpu_support([":libtpu_a"]),
     outs = ["lib.tar.gz"],
     cmd = """
-    LIB_DIR=$$(mktemp -d)
-    mv $(SRCS) $${LIB_DIR}/
-    tar czf "$@" -C $${LIB_DIR} .
-    rm -rf $${LIB_DIR}
-  """,
+      set -eu
+      d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT
+      for f in $(SRCS); do
+        cp -n "$$f" "$$d/"
+      done
+      tar czf "$@" -C "$$d" .
+    """,
 )
 
 # See https://github.com/bazelbuild/rules_pkg/issues/517#issuecomment-1492917994

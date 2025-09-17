@@ -1,0 +1,3 @@
+register_toolchains("@local_config_apple_cc//:all")
+
+
