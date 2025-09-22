@@ -24,11 +24,14 @@
             cudaSupport = true;
           };
         };
+
         lib = pkgs.lib;
         isDarwin = pkgs.stdenv.isDarwin;
 
-        # XLA pin (same as before)
-        XLA_REV = "2a6015f068e4285a69ca9a535af63173ba92995b";
+        sdkroot = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk";
+
+        # XLA pin
+        XLA_REV = "98bc2a2e3a87ef3e4b41a59a251462089bfc998d";
 
         xlaSrc = pkgs.fetchFromGitHub {
           owner = "openxla";
@@ -40,39 +43,41 @@
         python = pkgs.python311;
         pythonPkgs = python.pkgs;
 
-        # Pick one Bazel release and fetch the upstream prebuilt binary.
-        bazelPrebuilt =
-          if isDarwin
-          then
-            pkgs.stdenv.mkDerivation {
-              pname = "bazel-prebuilt";
-              version = "7.6.0";
-              src = pkgs.fetchurl {
+        bazelPrebuilt = pkgs.stdenv.mkDerivation {
+          pname = "bazel-prebuilt";
+          version = "7.6.0";
+          src = with pkgs;
+            fetchurl (
+              if system == "aarch64-darwin"
+              then {
                 url = "https://releases.bazel.build/7.6.0/release/bazel-7.6.0-darwin-arm64";
                 sha256 = "sha256-4bRp4OvkRIvhpZ2r/eFJdwrByECHy3rncDEM1tClFYo=";
-              };
-              dontUnpack = true;
-              phases = ["installPhase" "patchPhase"];
-              installPhase = ''
-                mkdir -p $out/bin
-                install -Dm755 "$src" "$out/bin/bazel"
-              '';
-            }
-          else
-            pkgs.stdenv.mkDerivation {
-              pname = "bazel-prebuilt";
-              version = "7.6.0";
-              src = pkgs.fetchurl {
+              }
+              else if system == "aarch64-linux"
+              then {
+                url = "https://github.com/bazelbuild/bazel/releases/download/7.6.0/bazel-7.6.0-linux-arm64";
+                sha256 = "sha256-0NNmgQjDle7ia9O9LSUShf3W3N1w8itskUXnljrajmM=";
+              }
+              else if system == "x86_64-linux"
+              then {
                 url = "https://github.com/bazelbuild/bazel/releases/download/7.6.0/bazel-7.6.0-linux-x86_64";
                 sha256 = "sha256-0NNmgQjDle7ia9O9LSUShf3W3N1w8itskUXnljrajmM=";
-              };
-              dontUnpack = true;
-              installPhase = ''
-                install -Dm755 "$src" "$out/bin/bazel"
-              '';
-            };
+              }
+              else builtins.throw "Unsupported system ${system}"
+            );
+          dontUnpack = true;
+          phases = ["installPhase" "patchPhase"];
+          patchPharse = ''
+            # Replace the universal tool with the native one so AppleLipo is never invoked.
+            substituteInPlace external/com_github_grpc_grpc/src/compiler/BUILD \
+              --replace "grpc_cpp_plugin_universal" "grpc_cpp_plugin_native"
+          '';
+          installPhase = ''
+            mkdir -p $out/bin
+            install -Dm755 "$src" "$out/bin/bazel"
+          '';
+        };
 
-        # bazel = pkgs.bazel_7.override {enableNixHacks = true;};
         bazel =
           bazelPrebuilt
           // {
@@ -82,26 +87,42 @@
         commonNativeBuildInputs =
           [
             bazel
-            pkgs.llvm_20
             pkgs.git
             pkgs.unzip
             pkgs.wget
-            pkgs.curl
             python
             pythonPkgs.pip
             pythonPkgs.numpy
           ]
-          ++ (
-            if isDarwin
-            then [pkgs.darwin.cctools]
-            else [pkgs.binutils pkgs.libtool]
-          );
+          ++ lib.optionals (!isDarwin) [
+            pkgs.llvm_20
+            pkgs.curl
+            pkgs.binutils
+            pkgs.libtool
+          ];
 
-        # On macOS we keep Apple cctools & LLVM early on PATH
-        darwinPath = "${pkgs.darwin.cctools}/bin:${pkgs.llvm}/bin:${python}/bin";
+        # tool paths
+        darwinPath = "${python}/bin";
         linuxPath = "${pkgs.binutils}/bin:${pkgs.llvm}/bin:${python}/bin";
-        darwinLibtool = "${pkgs.darwin.cctools}/bin/libtool";
         gnuLibtool = "${pkgs.libtool}/bin/libtool";
+        darwinDevDir = "/Applications/Xcode.app/Contents/Developer";
+
+        # PATH for Bazel actions on macOS (shim first, then toolchains)
+        actionEnvPath = lib.makeSearchPath "bin" [
+          pkgs.coreutils
+          pkgs.findutils
+          pkgs.gnugrep
+          pkgs.gnused
+          pkgs.gawk
+          pkgs.gnutar
+          pkgs.gzip
+          pkgs.zip
+          pkgs.unzip
+          pkgs.llvm
+          python
+        ];
+
+        git = "${pkgs.git}/bin/git";
 
         # Phase env shared by fetch/build; runs your configure.py
         mkPhaseEnv = {
@@ -116,9 +137,15 @@
           export LC_ALL=C.UTF-8
 
           ${lib.optionalString isDarwin ''
-            export PATH=${darwinPath}:$PATH
-            export LIBTOOL=${darwinLibtool}
+            export DEVELOPER_DIR=${darwinDevDir}
+            TOOLCHAIN=$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain
+            export PATH=${darwinPath}:$TOOLCHAIN/usr/bin:$PATH
+            export SDKROOT=${sdkroot}
+            # Bazel must not inherit Nix include/linker env as they inject /nix/store headers
+            unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH OBJCPLUS_INCLUDE_PATH
+            unset NIX_CFLAGS_COMPILE NIX_CFLAGS_LINK NIX_LDFLAGS NIX_CXXSTDLIB_COMPILE NIX_CXXSTDLIB_LINK
           ''}
+
           ${lib.optionalString (!isDarwin) ''
             export PATH=${linuxPath}:$PATH
             export LIBTOOL=${gnuLibtool}
@@ -145,34 +172,57 @@
         # Minimal Bazel flags: just select our in-repo profile
         mkBazelFlags = {cudaSupport ? false}: (
           [
+            "-s"
+            "--subcommands"
+            "--verbose_failures"
             (
               if isDarwin
               then "--config=macos"
               else "--config=linux"
             )
           ]
+          # We still inject a PATH value for actions on macOS because it is built from Nix store paths.
+          ++ lib.optionals isDarwin [
+            "--repo_env=USE_HERMETIC_CC_TOOLCHAIN=0"
+            "--action_env=PATH=${actionEnvPath}:/usr/bin"
+            "--repo_env=PATH=${actionEnvPath}:/usr/bin"
+            # target sysroot
+            "--copt=-isysroot${sdkroot}"
+            "--cxxopt=-isysroot${sdkroot}"
+            "--conlyopt=-isysroot${sdkroot}"
+            "--linkopt=-isysroot${sdkroot}"
+            # host/exec sysroot
+            "--host_copt=-isysroot${sdkroot}"
+            "--host_cxxopt=-isysroot${sdkroot}"
+            "--host_conlyopt=-isysroot${sdkroot}"
+            "--host_linkopt=-isysroot${sdkroot}"
+          ]
           ++ lib.optionals cudaSupport ["--config=cuda"]
         );
 
-        # Copy upstream XLA and overlay our extension directory + .bazelrc import
+        # Prepare XLA, overlay extension, and inject a separate macOS rc file, imported by .bazelrc
         mkXlaSrcWithExtension = {backend}:
           pkgs.runCommand "xla-ext-${backend}" {} ''
             set -eo pipefail
-            cp -R ${xlaSrc} $out
-            chmod -R u+w $out
+            cp -R ${xlaSrc} "$out"
 
+            # Replace extension with ours
             rm -rf "$out/xla/extension"
             mkdir -p "$out/xla"
+            chmod -R u+w $out
             cp -R ${self}/extension "$out/xla/extension"
 
-            # Pin Bazel version used by developers to 7.6 (builder still uses nixpkgs bazel)
-            echo "7.6.0" > "$out/.bazelversion"
+            # NOW make the whole tree writable (do this AFTER the copy from the store)
+            chmod -R u+w "$out"
+
+            ${git} apply --directory="$out" --unsafe-paths "$out"/xla/extension/patches/*
+            # Pin Bazel version developers see
+            echo 7.6.0 > "$out/.bazelversion"
 
             # Ensure root .bazelrc imports our fragment (idempotent)
             if ! grep -q 'xla/extension/bazelrc.fragment' "$out/.bazelrc" 2>/dev/null; then
               echo 'import xla/extension/bazelrc.fragment' >> "$out/.bazelrc"
-            fi
-          '';
+            fi          '';
 
         mkXlaTarball = {
           name,
@@ -184,8 +234,6 @@
         }: let
           srcPrepared = mkXlaSrcWithExtension {inherit backend;};
           cudaPkgs = pkgs.cudaPackages;
-
-          # hostGcc exists only on x86_64-linux; guard it
           hostGccOpt = lib.attrByPath ["hostGcc"] null cudaPkgs;
 
           cudaInputs =
@@ -208,11 +256,22 @@
                 else cudaNameForArtifact
               )
             else "cpu";
+
           outName = "xla_extension-${platform}-${xlaTargetForName}.tar.gz";
 
-          prePhase = mkPhaseEnv {
-            inherit backend cudaSupport cudaPkgs hostGccOpt;
-          };
+          prePhase = mkPhaseEnv {inherit backend cudaSupport cudaPkgs hostGccOpt;};
+
+          impureHostDeps = lib.optionals isDarwin [
+            "/Applications/Xcode.app"
+            "/Library/Developer/CommandLineTools"
+            "/usr/bin/xcrun"
+            "/usr/bin/xcodebuild"
+            "/usr/include"
+          ];
+
+          patchThingsUp = ''
+            bash ./xla/extension/patch-stuff-pre-build.sh
+          '';
         in
           pkgs.buildBazelPackage {
             pname = name;
@@ -220,13 +279,21 @@
             inherit bazel;
             src = srcPrepared;
 
+            "allowed-impure-host-deps" = impureHostDeps;
+
             buildAttrs = {
+              buildInputs = lib.optional isDarwin [pkgs.apple-sdk_15];
               nativeBuildInputs = commonNativeBuildInputs ++ cudaInputs;
               preConfigure = prePhase;
+
+              "allowed-impure-host-deps" = impureHostDeps;
 
               bazelTargets = ["//xla/extension:tarball"];
               bazelFlags = buildFlags;
               dontStrip = true;
+              dontAddBazelOpts = true;
+
+              preBuild = patchThingsUp;
 
               installPhase = ''
                 set -eo pipefail
@@ -241,16 +308,32 @@
 
             fetchAttrs = {
               nativeBuildInputs = commonNativeBuildInputs ++ cudaInputs;
-              preBuild = prePhase;
+              preBuild =
+                prePhase
+                + patchThingsUp;
+
+              "allowed-impure-host-deps" = impureHostDeps;
+
               bazelTargets = ["//xla/extension:tarball"];
               bazelFlags = fetchFlags;
               bazelFetchFlags = fetchFlags;
-              # Keep your known-good source fetch hash
-              sha256 = "sha256-aS15t5wpTsaIVJHvDZXOkSlN1uTMzEkn+ya+FQCtYgI=";
+              sha256 = "sha256-wleWQZT+UcwkUkiAQF6cfqUWK4AB2PB9nuszXIf0WuI=";
             };
+
+            NIX_CFLAGS_COMPILE = "";
+            NIX_LDFLAGS = "";
+            CFLAGS = "";
+            CPPFLAGS = "";
+            CPATH = "";
+            C_INCLUDE_PATH = "";
+            CPLUS_INCLUDE_PATH = "";
           };
       in
         {
+          # env = {
+          #   SYSROOT = "-isysroot${sdkroot}";
+          # };
+
           packages.xla-tarball-linux-cpu = mkXlaTarball {
             name = "xla-tarball-linux-cpu";
             backend = "cpu";
@@ -270,36 +353,38 @@
           };
 
           devShells.default = pkgs.mkShell {
-            nativeBuildInputs = commonNativeBuildInputs;
+            nativeBuildInputs =
+              commonNativeBuildInputs
+              ++ lib.optionals isDarwin
+              [
+                pkgs.apple-sdk_15
+              ];
+
             LC_ALL = "C.UTF-8";
+
+            shellHook = ''
+              export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+            '';
           };
 
-          # Run with: `nix flake check`
           checks.toolchain-verification = let
             prepared = mkXlaSrcWithExtension {backend = "cpu";};
           in
             pkgs.runCommand "bazel-toolchain-verification"
-            {
-              nativeBuildInputs = [bazel pkgs.coreutils pkgs.gnugrep pkgs.python3];
-            } ''
+            {nativeBuildInputs = [bazel pkgs.coreutils pkgs.gnugrep pkgs.python3];} ''
               set -eu
               BAZEL="${bazel}/bin/bazel"
-              # Work inside the prepared XLA workspace that already imports our fragment.
               cp -r ${prepared} ./src
               chmod -R u+w ./src
               cd ./src
 
               echo "==> Verifying Bazel selects @local_config_apple_cc on macOS"
-              # Print the actual cc_toolchain target Bazel resolved to
               bazel cquery --config=macos \
                 'kind(cc_toolchain, deps(@bazel_tools//tools/cpp:current_cc_toolchain))' \
                 --output=label | tee cc_toolchain.txt
 
-              # Assert we picked the stub we ship (and not local_config_cc)
               grep -q '@local_config_apple_cc' cc_toolchain.txt
-              ! grep -q 'local_config_cc' cc_toolchain.txt             #
-
-              cp cc_toolchain.txt "$out"
+              ! grep -q 'local_config_cc' cc_toolchain.txt
 
               mkdir -p tools/check
               cat > tools/check/BUILD <<'EOF'
@@ -311,6 +396,7 @@
               echo 'int main(){return 0;}' > tools/check/tiny.cc
 
               bazel build --config=macos --nobuild -s //tools/check:tiny | tee build.log
+              cp cc_toolchain.txt "$out"
             '';
         }
         // lib.optionalAttrs (system == "x86_64-linux") {

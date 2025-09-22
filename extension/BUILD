@@ -197,7 +197,7 @@ genrule(
       set -eu
       d=$$(mktemp -d); trap 'rm -rf "$$d"' EXIT
       for f in $(SRCS); do
-        cp "$$f" "$$d/"
+        cp -n "$$f" "$$d/"
       done
       tar czf "$@" -C "$$d" .
     """,
