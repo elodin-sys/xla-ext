@@ -8,6 +8,8 @@ build --config=short_logs
 build --repo_env=HERMETIC_PYTHON_VERSION=3.11
 # XLA uses cc_configure extensions; keep Bazel from re-detecting stuff randomly
 build --repo_env=USE_HERMETIC_CC_TOOLCHAIN=1
+build --repo_env=BAZEL_CXXOPTS=-std=c++17
+build --verbose_failures --sandbox_debug
 
 # Warnings that are noisy in the XLA tree (both platforms)
 build --copt=-Wno-sign-compare
