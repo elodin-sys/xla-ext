@@ -28,18 +28,23 @@ LINK_FLAGS := $(shell cat $(XLA_EXTRACTED)/lib/libxla_extension.link 2>/dev/null
 # Targets
 TARGET := test_xla
 SIMPLE_TARGET := test_simple
+COMPREHENSIVE_TARGET := test_comprehensive
 
 # Source files
 SOURCES := test_xla.cpp
 SIMPLE_SOURCES := test_simple.cpp
+COMPREHENSIVE_SOURCES := test_comprehensive.cpp
 OBJECTS := $(SOURCES:.cpp=.o)
 SIMPLE_OBJECTS := $(SIMPLE_SOURCES:.cpp=.o)
+COMPREHENSIVE_OBJECTS := $(COMPREHENSIVE_SOURCES:.cpp=.o)
 
-.PHONY: all clean extract run run-simple simple
+.PHONY: all clean extract run run-simple run-comprehensive simple comprehensive
 
 all: extract $(TARGET)
 
 simple: extract $(SIMPLE_TARGET)
+
+comprehensive: extract $(COMPREHENSIVE_TARGET)
 
 # Extract the XLA archive if not already extracted
 extract:
@@ -68,6 +73,12 @@ $(SIMPLE_TARGET): $(SIMPLE_OBJECTS)
 	$(CXX) -o $(SIMPLE_TARGET) $(SIMPLE_OBJECTS) $(LDFLAGS) $(LINK_FLAGS)
 	@echo "✓ Build successful!"
 
+# Build the comprehensive test executable
+$(COMPREHENSIVE_TARGET): $(COMPREHENSIVE_OBJECTS)
+	@echo "Linking $(COMPREHENSIVE_TARGET)..."
+	$(CXX) -o $(COMPREHENSIVE_TARGET) $(COMPREHENSIVE_OBJECTS) $(LDFLAGS) $(LINK_FLAGS)
+	@echo "✓ Build successful!"
+
 # Compile source files
 %.o: %.cpp
 	@echo "Compiling $<..."
@@ -87,9 +98,16 @@ run-simple: $(SIMPLE_TARGET)
 	@echo ""
 	./$(SIMPLE_TARGET)
 
+# Run the comprehensive test
+run-comprehensive: $(COMPREHENSIVE_TARGET)
+	@echo ""
+	@echo "Running comprehensive XLA test..."
+	@echo ""
+	./$(COMPREHENSIVE_TARGET)
+
 # Clean build artifacts
 clean:
-	rm -f $(OBJECTS) $(SIMPLE_OBJECTS) $(TARGET) $(SIMPLE_TARGET)
+	rm -f $(OBJECTS) $(SIMPLE_OBJECTS) $(COMPREHENSIVE_OBJECTS) $(TARGET) $(SIMPLE_TARGET) $(COMPREHENSIVE_TARGET)
 	@echo "Cleaned build artifacts"
 
 # Clean everything including extracted XLA

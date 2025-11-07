@@ -41,3 +41,4 @@ xla_extension/
 /test_static_lib/*.o
 /test_static_lib/test_xla
 /test_static_lib/test_simple
+/test_static_lib/test_comprehensive
