@@ -33,3 +33,11 @@ xla-*.tar
 
 # Archive checksums file
 /checksum.txt
+
+xla_extension/
+
+# Test build artifacts
+/test_static_lib/xla_extension/
+/test_static_lib/*.o
+/test_static_lib/test_xla
+/test_static_lib/test_simple

@@ -9,7 +9,9 @@
 BUILD_MODE ?= opt # can also be dbg
 OPENXLA_GIT_REPO ?= https://github.com/openxla/xla.git
 
-OPENXLA_GIT_REV ?= 870d90fd098c480fb8a426126bd02047adb2bc20
+# XLA commit matching JAX v0.8.0
+# https://github.com/jax-ml/jax/blob/jax-v0.8.0/third_party/xla/revision.bzl
+OPENXLA_GIT_REV ?= 9f150f6b75c08d6ea7b97697c4f393f1a0eb6121
 
 # Private configuration
 BAZEL_FLAGS = --define "framework_shared_object=false" -c $(BUILD_MODE)
