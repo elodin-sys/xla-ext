@@ -6,12 +6,14 @@ load("//xla/tsl:tsl.bzl", "tsl_grpc_cc_dependencies",)
 load("//xla/tsl:tsl.bzl", "transitive_hdrs",)
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
+load(":static-lib.bzl", "cc_static_library")
 
 package(default_visibility=["//visibility:private"])
 
-# Shared library which contains the subset of XLA required for EXLA
-cc_binary(
-  name = "libxla_extension.so",
+# Static library which contains dependencies necessary for building on
+# top of XLA
+cc_static_library(
+  name = "libxla_extension",
   deps = [
     "//xla:xla_proto_cc_impl",
     "//xla:xla_data_proto_cc_impl",
@@ -97,24 +99,6 @@ cc_binary(
   + if_rocm([
     "//xla/stream_executor:rocm_platform"
   ]),
-  copts = ["-fvisibility=default"],
-  linkopts= select({
-    "//xla/tsl:macos": [
-        # We set the install_name, such that the library is looked up
-        # in the RPATH at runtime, otherwise the install_name is an
-        # arbitrary path within bazel workspace
-        "-Wl,-install_name,@rpath/libxla_extension.so",
-        # We set RPATH to the same dir as libxla_extension.so, so that
-        # loading PjRt plugins in the same directory works out of the box
-        "-Wl,-rpath,@loader_path/",
-    ],
-    "//conditions:default": [
-        "-Wl,-soname,libxla_extension.so",
-        "-Wl,-rpath='$$ORIGIN'",
-    ],
-  }),
-  features = ["-use_header_modules"],
-  linkshared = 1,
 )
 
 # Transitive hdrs gets all headers required by deps, including
@@ -122,9 +106,82 @@ cc_binary(
 # of unused headers as well
 transitive_hdrs(
   name = "xla_extension_dep_headers",
-  deps = [
-    ":libxla_extension.so",
+  deps =  [
+    "//xla:xla_proto_cc_impl",
+    "//xla:xla_data_proto_cc_impl",
+    "//xla:autotune_results_proto_cc_impl",
+    "//xla:autotuning_proto_cc_impl",
+    "//xla/service:hlo_proto_cc_impl",
+    "//xla/service/memory_space_assignment:memory_space_assignment_proto_cc_impl",
+    "//xla/service:buffer_assignment_proto_cc_impl",
+    "//xla/service/gpu:backend_configs_cc_impl",
+    "//xla/service/gpu/model:hlo_op_profile_proto_cc_impl",
+    "//xla/stream_executor:device_description_proto_cc_impl",
+    "//xla/stream_executor:stream_executor_impl",
+    "//xla/stream_executor/gpu:gpu_init_impl",
+    "//xla/stream_executor/host:host_platform",
+    "//xla:literal",
+    "//xla:shape_util",
+    "//xla/tsl/platform:status",
+    "//xla/tsl/platform:statusor",
+    "//xla/tsl/concurrency:async_value",
+    "@tsl//tsl/platform:platform_port",
+    "//xla/service:custom_call_target_registry",
+    "@llvm-project//llvm:config",
+    "//xla:types",
+    "//xla:util",
+    "//xla/mlir/utils:error_util",
+    "//xla/mlir_hlo",
+    "//xla/mlir_hlo:all_passes",
+    "//xla/pjrt:mlir_to_hlo",
+    "//xla/hlo/translate/hlo_to_mhlo:hlo_to_mlir_hlo",
+    "//xla/hlo/builder:xla_computation",
+    "//xla/hlo/builder/lib:lu_decomposition",
+    "//xla/hlo/builder/lib:math",
+    "//xla/hlo/builder/lib:qr",
+    "//xla/hlo/builder/lib:svd",
+    "//xla/hlo/builder/lib:self_adjoint_eig",
+    "//xla/hlo/builder/lib:sorting",
+    "//xla/pjrt:pjrt_client",
+    "//xla/pjrt:pjrt_compiler",
+    "//xla/pjrt:tfrt_cpu_pjrt_client",
+    "//xla/pjrt:pjrt_c_api_client",
+    "//xla/pjrt/distributed",
+    "//xla/pjrt/gpu:se_gpu_pjrt_client",
+    "//xla/pjrt/distributed:client",
+    "//xla/pjrt/distributed:service",
+    "//xla/service:metrics_proto_cc_impl",
+    "//xla/stream_executor/cuda:cuda_compute_capability_proto_cc_impl",
+    "@com_google_absl//absl/types:span",
+    "@com_google_absl//absl/types:optional",
+    "@com_google_absl//absl/base:log_severity",
+    "@com_google_protobuf//:protobuf",
+    "@llvm-project//llvm:Support",
+    "@llvm-project//mlir:FuncDialect",
+    "@llvm-project//mlir:IR",
+    "@llvm-project//mlir:Parser",
+    "@llvm-project//mlir:Pass",
+    "@llvm-project//mlir:ReconcileUnrealizedCasts",
+    "@llvm-project//mlir:SparseTensorDialect",
+    "@tsl//tsl/platform:errors",
+    "@tsl//tsl/platform:fingerprint",
+    "@ml_dtypes_py//ml_dtypes:float8",
+    "@ml_dtypes_py//ml_dtypes:intn",
+    "@ml_dtypes_py//ml_dtypes:mxfloat",
+    "@tsl//tsl/platform:statusor",
+    "@tsl//tsl/platform:env_impl",
+    "@tsl//tsl/platform:tensor_float_32_utils",
+    "//xla/tsl/profiler/utils:time_utils_impl",
+    "//xla/tsl/profiler/backends/cpu:annotation_stack_impl",
+    "//xla/tsl/profiler/backends/cpu:traceme_recorder_impl",
+    "//xla/tsl/protobuf:protos_all_cc_impl",
+    "//xla/tsl/protobuf:dnn_proto_cc_impl",
+    "//xla/tsl/framework:allocator",
+    "//xla/tsl/framework:allocator_registry_impl",
+    "//xla/tsl/util:determinism",
   ]
+  # GRPC Dependencies (needed for PjRt distributed)
+  + tsl_grpc_cc_dependencies()
 )
 
 # This is the genrule used by TF install headers to correctly
@@ -202,15 +259,12 @@ genrule(
   """
 )
 
-# This genrule remaps libxla_extension.so to lib/libxla_extension.so
+# This genrule remaps libxla_extension.a to lib/libxla_extension.a
 genrule(
   name = "xla_extension_lib",
   srcs = [
-    ":libxla_extension.so",
-  ]
-  + if_with_tpu_support([
-    ":libtpu_so"
-  ]),
+    ":libxla_extension",
+  ],
   outs = ["lib.tar.gz"],
   cmd = """
     LIB_DIR=$$(mktemp -d)

@@ -24,6 +24,7 @@ $(BUILD_ARCHIVE): $(OPENXLA_DIR) extension/BUILD
 	rm -f $(OPENXLA_XLA_EXTENSION_DIR) && \
 		ln -s "$(ROOT_DIR)/extension" $(OPENXLA_XLA_EXTENSION_DIR) && \
 		cd $(OPENXLA_DIR) && \
+		cat $(ROOT_DIR)/WORKSPACE >> WORKSPACE && \
 		bazel build $(BAZEL_FLAGS) $(BUILD_FLAGS) $(BUILD_INTERNAL_FLAGS) //$(OPENXLA_XLA_EXTENSION_NS):xla_extension && \
 		mkdir -p $(dir $(BUILD_ARCHIVE)) && \
 		cp -f $(OPENXLA_XLA_BUILD_ARCHIVE) $(BUILD_ARCHIVE)
