@@ -16,6 +16,8 @@ env:
 jobs:
   linux-cpu:
     name: "x86_64-linux-gnu-cpu"
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -30,6 +32,8 @@ jobs:
 
   linux-cuda:
     name: "x86_64-linux-gnu-cuda12"
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -44,6 +48,8 @@ jobs:
 
   linux-tpu:
     name: "x86_64-linux-gnu-tpu"
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -58,6 +64,8 @@ jobs:
 
   linux-arm-cpu:
     name: "aarch64-linux-gnu-cpu"
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04-arm
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -72,6 +80,8 @@ jobs:
 
   linux-arm-cuda:
     name: "aarch64-linux-gnu-cuda12"
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04-arm
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
@@ -86,6 +96,8 @@ jobs:
 
   macos:
     name: "x86_64-darwin-cpu"
+    permissions:
+      contents: write
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
@@ -117,6 +129,8 @@ jobs:
 
   macos-arm:
     name: "aarch64-darwin-cpu"
+    permissions:
+      contents: write
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
