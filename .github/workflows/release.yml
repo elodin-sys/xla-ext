@@ -18,7 +18,7 @@ jobs:
     name: "x86_64-linux-gnu-cpu"
     permissions:
       contents: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-96-2040
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
       - run: rm -rf /opt/hostedtoolcache
@@ -34,7 +34,7 @@ jobs:
     name: "x86_64-linux-gnu-cuda12"
     permissions:
       contents: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-96-2040
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
       - run: rm -rf /opt/hostedtoolcache
@@ -50,7 +50,7 @@ jobs:
     name: "x86_64-linux-gnu-tpu"
     permissions:
       contents: write
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-96-2040
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
       - run: rm -rf /opt/hostedtoolcache
@@ -66,7 +66,7 @@ jobs:
     name: "aarch64-linux-gnu-cpu"
     permissions:
       contents: write
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04-64-2040-arm
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
       - run: rm -rf /opt/hostedtoolcache
@@ -82,7 +82,7 @@ jobs:
     name: "aarch64-linux-gnu-cuda12"
     permissions:
       contents: write
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04-64-2040-arm
     steps:
       # Free up space, see https://github.com/orgs/community/discussions/25678#discussioncomment-5242449
       - run: rm -rf /opt/hostedtoolcache
@@ -94,38 +94,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  macos:
-    name: "x86_64-darwin-cpu"
-    permissions:
-      contents: write
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.NX_XLA_SHA }}
-      - run: brew install elixir
-      - run: mix local.hex --force
-      # Setup the compilation environment
-      - uses: bazel-contrib/setup-bazel@0.14.0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: python -m pip install --upgrade pip numpy
-      # Build and upload the archive
-      - run: mix deps.get
-      - run: mix compile
-        env:
-          XLA_TARGET: cpu
-          # This runner comes with Clang 14, which does not support the -mavxvnniint8
-          # CLI flag. We can install newer Clang, however at some point Bazel toolchains
-          # invoke xcrun clang, which always uses the system version from Xcode, ignoring
-          # whichever version we installed ourselves. With the flag below, we make sure
-          # this flag is not passed in the first place.
-          # See https://github.com/tensorflow/tensorflow/pull/87514
-          BUILD_FLAGS: "--define=xnn_enable_avxvnniint8=false"
-      - run: .github/scripts/upload_artifact.sh ${{ env.NX_XLA_SHA }} ${{ env.NX_XLA_RELEASE_NAME }} tmp/cache/*/build/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # macos:
+  #   name: "x86_64-darwin-cpu"
+  #   permissions:
+  #     contents: write
+  #   runs-on: macos-13
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ env.NX_XLA_SHA }}
+  #     - run: brew install elixir
+  #     - run: mix local.hex --force
+  #     # Setup the compilation environment
+  #     - uses: bazel-contrib/setup-bazel@0.14.0
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.11"
+  #     - run: python -m pip install --upgrade pip numpy
+  #     # Build and upload the archive
+  #     - run: mix deps.get
+  #     - run: mix compile
+  #       env:
+  #         XLA_TARGET: cpu
+  #         # This runner comes with Clang 14, which does not support the -mavxvnniint8
+  #         # CLI flag. We can install newer Clang, however at some point Bazel toolchains
+  #         # invoke xcrun clang, which always uses the system version from Xcode, ignoring
+  #         # whichever version we installed ourselves. With the flag below, we make sure
+  #         # this flag is not passed in the first place.
+  #         # See https://github.com/tensorflow/tensorflow/pull/87514
+  #         BUILD_FLAGS: "--define=xnn_enable_avxvnniint8=false"
+  #     - run: .github/scripts/upload_artifact.sh ${{ env.NX_XLA_SHA }} ${{ env.NX_XLA_RELEASE_NAME }} tmp/cache/*/build/*
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   macos-arm:
     name: "aarch64-darwin-cpu"
